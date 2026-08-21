@@ -1,0 +1,395 @@
+import { useEffect, useState } from "react";
+import { claimApi } from "../../api/claimApi";
+import { userApi } from "../../api/userApi";
+import { settlementApi } from "../../api/settlementApi";
+import { auditApi } from "../../api/auditApi";
+import Alert from "../../components/common/Alert";
+import Button from "../../components/common/Button";
+import Card from "../../components/common/Card";
+import Input from "../../components/common/Input";
+import Select from "../../components/common/Select";
+import StatusBadge from "../../components/common/StatusBadge";
+import EmptyState from "../../components/common/EmptyState";
+import { formatCurrency, formatDateTime } from "../../utils/formatters";
+import { extractErrorMessage } from "../../utils/validators";
+
+export default function AdminBusinessTools() {
+  const [claims, setClaims] = useState([]);
+  const [officers, setOfficers] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [claimId, setClaimId] = useState("");
+  const [officerId, setOfficerId] = useState("");
+  const [risk, setRisk] = useState(null);
+  const [settlement, setSettlement] = useState(null);
+  const [approvedAmount, setApprovedAmount] = useState("");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const selectedClaim = claims.find(
+    (c) => String(c.claimId) === String(claimId),
+  );
+
+  const workloadByOfficer = officers.reduce((acc, officer) => {
+    const activeCount = claims.filter(
+      (c) =>
+        String(c.assignedAgentId) === String(officer.userId) &&
+        !["APPROVED", "REJECTED"].includes(c.claimStatus),
+    ).length;
+    acc[officer.userId] = activeCount;
+    return acc;
+  }, {});
+
+  const WORKLOAD_HIGH_THRESHOLD = 5;
+
+  const loadInitial = async () => {
+    setError("");
+    try {
+      const [claimsRes, usersRes, auditRes] = await Promise.all([
+        claimApi.getAll({
+          page: 0,
+          size: 100,
+          sortBy: "createdAt",
+          direction: "desc",
+        }),
+        userApi.getAll({
+          page: 0,
+          size: 100,
+          role: "AGENT",
+          sortBy: "createdAt",
+          direction: "desc",
+        }),
+        auditApi.getAll({
+          page: 0,
+          size: 20,
+          sortBy: "createdAt",
+          direction: "desc",
+        }),
+      ]);
+      setClaims(claimsRes.data.data.content || []);
+      setOfficers(
+        (usersRes.data.data.content || []).filter(
+          (u) => u.role === "AGENT" && u.isActive,
+        ),
+      );
+      setAuditLogs(auditRes.data.data.content || []);
+    } catch (err) {
+      setError(extractErrorMessage(err, "Could not load business tools data."));
+    }
+  };
+
+  useEffect(() => {
+    loadInitial();
+  }, []);
+
+  const runAction = async (action, successMessage) => {
+    setLoading(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await action();
+      setMessage(successMessage);
+      await loadInitial();
+      return result;
+    } catch (err) {
+      setError(extractErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAssign = () => {
+    if (!claimId || !officerId)
+      return setError("Select claim and insurance operations officer first.");
+    runAction(
+      () => claimApi.assign(claimId, officerId),
+      "Claim assigned successfully.",
+    );
+  };
+
+  const handleRisk = async () => {
+    if (!claimId) return setError("Select a claim first.");
+    const res = await runAction(
+      () => claimApi.riskAssessment(claimId),
+      "Risk assessment loaded.",
+    );
+    if (res) setRisk(res.data.data);
+  };
+
+  const handleInitiateSettlement = async () => {
+    if (!claimId || !approvedAmount)
+      return setError("Select claim and enter approved amount.");
+    const res = await runAction(
+      () =>
+        settlementApi.initiate(claimId, {
+          approvedAmount: Number(approvedAmount),
+        }),
+      "Settlement initiated.",
+    );
+    if (res) setSettlement(res.data.data);
+  };
+
+  const handleFetchSettlement = async () => {
+    if (!claimId) return setError("Select a claim first.");
+    const res = await runAction(
+      () => settlementApi.getByClaim(claimId),
+      "Settlement fetched.",
+    );
+    if (res) setSettlement(res.data.data);
+  };
+
+  const handleMarkPaid = async () => {
+    if (!settlement?.settlementId || !paymentReference)
+      return setError("Fetch/initiate settlement and enter payment reference.");
+    const res = await runAction(
+      () =>
+        settlementApi.markPaid(settlement.settlementId, { paymentReference }),
+      "Settlement marked as paid.",
+    );
+    if (res) setSettlement(res.data.data);
+  };
+
+  return (
+    <div className="ops-page">
+      <div className="ops-hero business-tools-hero">
+        <div>
+          <span className="eyebrow">Admin Command Center</span>
+          <h1>Business Tools</h1>
+          <p>
+            Assign claims, assess risk, manage settlements, and review audit
+            trails from one focused workspace.
+          </p>
+        </div>
+        <div className="ops-hero-panel">
+          <strong>{claims.filter((c) => !c.assignedAgentName).length}</strong>
+          <span>unassigned claims</span>
+          <p>
+            Keep operational work moving with quick assignment and settlement
+            actions.
+          </p>
+        </div>
+      </div>
+
+      <div className="business-metric-grid ops-metric-grid">
+        <div className="business-metric ops-metric">
+          <span>Total Claims</span>
+          <strong>{claims.length}</strong>
+        </div>
+        <div className="business-metric ops-metric">
+          <span>Active Insurance Operations Officers</span>
+          <strong>{officers.length}</strong>
+        </div>
+        <div className="business-metric ops-metric">
+          <span>Audit Events</span>
+          <strong>{auditLogs.length}</strong>
+        </div>
+      </div>
+
+      <Alert type="error" message={error} onClose={() => setError("")} />
+      <Alert type="success" message={message} onClose={() => setMessage("")} />
+
+      <div className="detail-grid ops-card-grid">
+        <Card title="Claim Assignment & Risk">
+          <Select
+            label="Claim"
+            value={claimId}
+            onChange={(e) => {
+              setClaimId(e.target.value);
+              setRisk(null);
+              setSettlement(null);
+            }}
+            placeholder="Select claim"
+            options={claims.map((c) => ({
+              value: c.claimId,
+              label: `${c.claimNumber} — ${c.planName} (${c.policyNumber}) — ${c.customerName} — ${c.claimStatus}`,
+            }))}
+          />
+
+          {selectedClaim && (
+            <p className="form-section-hint">
+              Plan: <strong>{selectedClaim.planName}</strong> · Policy:{" "}
+              {selectedClaim.policyNumber} · Status:{" "}
+              <StatusBadge status={selectedClaim.claimStatus} /> · Amount:{" "}
+              {formatCurrency(selectedClaim.claimAmount)}
+              {selectedClaim.assignedAgentName
+                ? ` · Assigned to: ${selectedClaim.assignedAgentName}`
+                : " · Unassigned"}
+            </p>
+          )}
+
+          <Select
+            label="Insurance Operations Officer"
+            value={officerId}
+            onChange={(e) => setOfficerId(e.target.value)}
+            placeholder="Select active insurance operations officer"
+            options={officers.map((a) => ({
+              value: a.userId,
+              label: `${a.fullName} (${a.email}) — ${
+                workloadByOfficer[a.userId] || 0
+              } active claim${workloadByOfficer[a.userId] === 1 ? "" : "s"}${
+                workloadByOfficer[a.userId] >= WORKLOAD_HIGH_THRESHOLD
+                  ? " ⚠️ Overloaded"
+                  : ""
+              }`,
+            }))}
+          />
+          <div className="modal-actions">
+            <Button onClick={handleAssign} loading={loading}>
+              Assign Claim
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleRisk}
+              loading={loading}
+            >
+              Check Risk
+            </Button>
+          </div>
+          {risk && (
+            <div className="risk-result-card">
+              <h4>
+                Risk: {risk.riskLevel} ({risk.riskScore}/100)
+              </h4>
+              <ul>
+                {risk.reasons?.map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+
+        <Card title="Insurance Operations Officer Workload">
+          {officers.length === 0 ? (
+            <EmptyState message="No active insurance operations officers found." />
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {officers
+                .slice()
+                .sort(
+                  (a, b) =>
+                    (workloadByOfficer[b.userId] || 0) -
+                    (workloadByOfficer[a.userId] || 0),
+                )
+                .map((officer) => {
+                  const count = workloadByOfficer[officer.userId] || 0;
+                  const isOverloaded = count >= WORKLOAD_HIGH_THRESHOLD;
+
+                  return (
+                    <li
+                      key={officer.userId}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "0.75rem 0",
+                        borderBottom: "1px solid #eee",
+                      }}
+                    >
+                      <span>{officer.fullName}</span>
+
+                      <span
+                        className={`badge ${
+                          isOverloaded
+                            ? "badge-red"
+                            : count === 0
+                              ? "badge-grey"
+                              : "badge-blue"
+                        }`}
+                      >
+                        {count} active
+                      </span>
+                    </li>
+                  );
+                })}
+            </ul>
+          )}
+        </Card>
+
+        <Card title="Claim Settlement">
+          <Input
+            label="Approved Amount"
+            type="number"
+            value={approvedAmount}
+            onChange={(e) => setApprovedAmount(e.target.value)}
+            placeholder="5000"
+          />
+          <div className="modal-actions">
+            <Button onClick={handleInitiateSettlement} loading={loading}>
+              Initiate Settlement
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleFetchSettlement}
+              loading={loading}
+            >
+              Fetch Settlement
+            </Button>
+          </div>
+
+          {settlement && (
+            <div className="settlement-result-card">
+              <p>
+                <strong>{settlement.settlementNumber}</strong> ·{" "}
+                {settlement.settlementStatus}
+              </p>
+              <p>Approved: {formatCurrency(settlement.approvedAmount)}</p>
+              {settlement.paymentReference && (
+                <p>Payment Ref: {settlement.paymentReference}</p>
+              )}
+              <Input
+                label="Payment Reference"
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                placeholder="BANK-UTR-123"
+              />
+              <Button
+                onClick={handleMarkPaid}
+                loading={loading}
+                disabled={settlement.settlementStatus === "PAID"}
+              >
+                Mark Paid
+              </Button>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Card title="Latest Audit Logs">
+        {auditLogs.length === 0 ? (
+          <EmptyState message="No audit logs yet." />
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Actor</th>
+                  <th>Action</th>
+                  <th>Entity</th>
+                  <th>Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.map((a) => (
+                  <tr key={a.auditId}>
+                    <td>{formatDateTime(a.createdAt)}</td>
+                    <td>{a.actorEmail || "System"}</td>
+                    <td>{a.action}</td>
+                    <td>
+                      {a.entityType} #{a.entityId}
+                    </td>
+                    <td>{a.remarks}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}

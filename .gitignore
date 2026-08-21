@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Java / Spring Boot
+backend/target/
+backend/.classpath
+backend/.project
+backend/.settings/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+backend/src/main/resources/application.properties
