@@ -20,10 +20,10 @@ public class RazorpayService {
 
 	private static final Logger log = LoggerFactory.getLogger(RazorpayService.class);
 
-	@Value("${razorpay.key-id}")
+	@Value("${razorpay.key.id}")
 	private String keyId;
 
-	@Value("${razorpay.key-secret}")
+	@Value("${razorpay.key.secret}")
 	private String keySecret;
 
 
