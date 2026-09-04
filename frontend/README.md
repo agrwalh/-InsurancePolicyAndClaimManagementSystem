@@ -11,7 +11,7 @@ npm run dev
 
 The app runs at `http://localhost:5173`.
 
-## Before you run it
+## Before you run this
 
 Your Spring Boot backend must be running at `http://localhost:8080`.
 `vite.config.js` proxies every `/api/*` request from the frontend straight
