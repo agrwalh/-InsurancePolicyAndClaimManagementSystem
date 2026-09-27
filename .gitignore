@@ -21,4 +21,4 @@ frontend/dist/
 
 # Logs
 *.log
-backend/src/main/resources/application.properties
+
