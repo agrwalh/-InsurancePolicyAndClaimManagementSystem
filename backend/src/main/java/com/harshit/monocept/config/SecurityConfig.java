@@ -24,6 +24,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import com.harshit.monocept.repository.UserRepository;
 import com.harshit.monocept.security.CustomUserDetailsService;
 import com.harshit.monocept.security.JwtAuthFilter;
+import org.springframework.beans.factory.annotation.Value;
 
 import lombok.RequiredArgsConstructor;
 
@@ -36,6 +37,8 @@ public class SecurityConfig {
 	private final JwtAuthFilter jwtAuthFilter;
 	private final UserRepository userRepository;
 	private final CustomUserDetailsService customUserDetailsService;
+	@Value("${app.cors.allowed-origins}")
+	private List<String> allowedOrigins;
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -58,7 +61,7 @@ public class SecurityConfig {
 	@Bean
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration config = new CorsConfiguration();
-		config.setAllowedOrigins(List.of("http://localhost:5173"));
+		config.setAllowedOrigins(allowedOrigins);
 		config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 		config.setAllowedHeaders(List.of("*"));
 		config.setAllowCredentials(true);
