@@ -8,10 +8,21 @@ const api = axios.create({
   },
 });
 
+const PUBLIC_AUTH_ENDPOINTS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/verify-otp",
+  "/auth/resend-otp",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+];
+
 api.interceptors.request.use((config) => {
-  const isAuthEndpoint = config.url?.includes("/auth/");
+  const isPublicAuthEndpoint = PUBLIC_AUTH_ENDPOINTS.some((path) =>
+    config.url?.includes(path)
+  );
   const token = localStorage.getItem("token");
-  if (token && !isAuthEndpoint) {
+  if (token && !isPublicAuthEndpoint) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
