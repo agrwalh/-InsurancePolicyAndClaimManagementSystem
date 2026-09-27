@@ -7,7 +7,8 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
-axiosInstance.interceptors.request.use((config) => {
+
+api.interceptors.request.use((config) => {
   const isAuthEndpoint = config.url?.includes("/auth/");
   const token = localStorage.getItem("token");
   if (token && !isAuthEndpoint) {
@@ -15,6 +16,7 @@ axiosInstance.interceptors.request.use((config) => {
   }
   return config;
 });
+
 api.interceptors.response.use(
   (response) => normalizeApiResponse(response),
   (error) => {
